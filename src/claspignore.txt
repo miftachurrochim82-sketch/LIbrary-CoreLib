@@ -1,0 +1,15 @@
+# Mengabaikan berkas non-GAS
+**/**
+!appsscript.json
+!01_CoreFoundation.gs
+!02_CoreGateway.gs
+!03_CoreServices.gs
+!99_CoreTest.gs
+.git/**
+node_modules/**
+package.json
+package-lock.json
+README.md
+00_MIGRATION_v2.md
+*.md
+.github/**
