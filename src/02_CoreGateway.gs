@@ -1,5 +1,13 @@
 // ============================================================
-// CORE LIBRARY GLOBAL v2.3.0 - 02_CoreGateway.gs
+// CORE LIBRARY GLOBAL v2.4.0 - 02_CoreGateway.gs
+// Changelog v2.4.0 (2026-09-22) — C4/C5 DRAFT:
+// - ADD (C5): assertOwnership_(actor, ownerId, opts) + checkOwnership_() — guard kepemilikan
+//   baris. Jika actor admin/super → bypass. Dipakai untuk menu "Saya" (Laporan Saya/RTL Saya)
+//   di luar declarative router (manual apiSave). Throw bila bukan pemilik.
+// - ADD (C4): validateTransition_(current, target, transitionMap, isAdmin) — validasi
+//   perpindahan status workflow (draft→baru→diproses→selesai→batal). isAdmin bypass.
+//   Dipakai approval-panel CDN workflow.
+// - Wrapper publik: assertOwnership, checkOwnership, validateTransition.
 // Changelog v2.3.0 (2026-09-19):
 // - Sinkron rilis v2.3.0 (C1/C2/C3 ditambahkan di 01_CoreFoundation.gs).
 //   Tanpa perubahan fungsional di berkas ini.
@@ -377,6 +385,82 @@ function isAllowedConfigKey_(key, extraKeys) {
   if (ALLOWED_CONFIG_KEYS_.indexOf(k) !== -1) return true;
   if (Array.isArray(extraKeys) && extraKeys.indexOf(k) !== -1) return true;
   return false;
+}
+
+// ============================================================
+// §5b WORKFLOW & OWNERSHIP (v2.4.0 / C4, C5)
+// ============================================================
+
+/**
+ * C5 — assertOwnership_(actor, ownerId, opts)
+ * Pastikan actor adalah pemilik data ATAU admin/super.
+ * Throw bila bukan pemilik (kecuali admin bypass).
+ *
+ * @param {Object} actor - { role, pegawai_id / id / user_id }
+ * @param {string} ownerId - nilai kolom owner (mis. pegawai_id di row)
+ * @param {Object} opts - { allowAdminBypass: true/false } default true
+ * @throws {Error} bila bukan pemilik & bukan admin
+ * @returns {boolean} true bila lolos
+ */
+function assertOwnership_(actor, ownerId, opts) {
+  opts = opts || {};
+  var allowAdmin = opts.allowAdminBypass !== false; // default true
+  var role = String((actor && actor.role) || 'viewer').toLowerCase();
+  if (allowAdmin && (role === 'admin' || role === 'super')) return true;
+  var actorId = String((actor && (actor.pegawai_id || actor.id || actor.user_id)) || '').trim();
+  var targetId = String(ownerId || '').trim();
+  if (!actorId) throw new Error('Session tidak memuat pegawai_id — tidak bisa cek kepemilikan.');
+  if (!targetId) throw new Error('Data tidak memiliki pemilik (ownerId kosong).');
+  if (actorId !== targetId) throw new Error('Anda hanya boleh mengelola data milik sendiri.');
+  return true;
+}
+
+/**
+ * C5 helper — checkOwnership_(actor, ownerId, opts)
+ * Versi non-throw: return { allowed, error }.
+ */
+function checkOwnership_(actor, ownerId, opts) {
+  try {
+    assertOwnership_(actor, ownerId, opts);
+    return { allowed: true };
+  } catch (e) {
+    return { allowed: false, error: e.message };
+  }
+}
+
+/**
+ * C4 — validateTransition_(current, target, transitionMap, isAdmin)
+ * Validasi perpindahan status sesuai peta transisi.
+ * Throw bila tidak diizinkan (kecuali isAdmin = true → bypass).
+ *
+ * @param {string} current - status sekarang
+ * @param {string} target - status tujuan
+ * @param {Object} transitionMap - { fromStatus: [toStatus1, toStatus2], ... } case-insensitive
+ * @param {boolean} isAdmin - bila true, bypass (admin/super)
+ * @throws {Error} bila transisi tidak diizinkan
+ * @returns {boolean} true bila lolos
+ *
+ * Contoh peta:
+ *   { draft:['baru','batal'], baru:['diproses','batal'], diproses:['selesai','batal'], selesai:[], batal:[] }
+ */
+function validateTransition_(current, target, transitionMap, isAdmin) {
+  if (isAdmin) return true;
+  var cur = String(current || '').trim().toLowerCase();
+  var tgt = String(target || '').trim().toLowerCase();
+  if (!cur || !tgt) throw new Error('Status awal dan tujuan wajib diisi.');
+  if (cur === tgt) return true;
+  if (!transitionMap || typeof transitionMap !== 'object') throw new Error('Peta transisi tidak valid.');
+  // Cari key case-insensitive
+  var allowed = null;
+  var keys = Object.keys(transitionMap);
+  for (var i = 0; i < keys.length; i++) {
+    if (String(keys[i]).toLowerCase().trim() === cur) { allowed = transitionMap[keys[i]]; break; }
+  }
+  if (allowed === null) throw new Error('Status \"' + current + '\" tidak dikenal.');
+  if (!Array.isArray(allowed)) throw new Error('Peta transisi untuk \"' + current + '\" harus array.');
+  var allowedLower = allowed.map(function(x) { return String(x).toLowerCase().trim(); });
+  if (allowedLower.indexOf(tgt) === -1) throw new Error('Transisi \"' + current + ' → ' + target + '\" tidak diizinkan.');
+  return true;
 }
 
 // ============================================================
@@ -805,3 +889,12 @@ function getRoleForEmail(email, store) { return getRoleForEmail_(email, store); 
 
 /** Cek apakah key config boleh diubah dari UI. */
 function isAllowedConfigKey(key, extraKeys) { return isAllowedConfigKey_(key, extraKeys); }
+
+/** C5 — Pastikan actor adalah pemilik data (throw bila bukan). */
+function assertOwnership(actor, ownerId, opts) { return assertOwnership_(actor, ownerId, opts); }
+
+/** C5 — Cek kepemilikan tanpa throw: {allowed, error}. */
+function checkOwnership(actor, ownerId, opts) { return checkOwnership_(actor, ownerId, opts); }
+
+/** C4 — Validasi perpindahan status sesuai peta transisi (throw bila tidak diizinkan). */
+function validateTransition(current, target, transitionMap, isAdmin) { return validateTransition_(current, target, transitionMap, isAdmin); }
