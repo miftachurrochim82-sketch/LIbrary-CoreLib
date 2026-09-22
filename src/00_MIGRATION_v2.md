@@ -1,11 +1,12 @@
-# 📖 Dokumen Master CoreLib — Backend Global v2.3.0
+# 📖 Dokumen Master CoreLib — Backend Global v2.4.0 DRAFT
 
 > **Dokumen ini adalah master referensi backend CoreLib.** Disimpan hanya di GitHub
 > (Google Apps Script tidak bisa menyimpan file `.md`). Folder `backend/` di repo ini
 > adalah **salinan sumber resmi** dari library GAS `CoreLib` — setiap perubahan pada
 > library harus dicerminkan di sini, dan sebaliknya.
 >
-> **Status terakhir**: v2.3.0 — diverifikasi live 2026-09-19 (`testAll()` → PASS 42 / FAIL 0 / SKIP 1).
+> **Status terakhir**: **v2.4.0 DRAFT** (2026-09-22) — belum save versi — target `testAll()` → PASS 45 / FAIL 0 / SKIP 1.
+> **Live terakhir**: v2.3.0 (2026-09-19, pin 15).
 
 ---
 
@@ -17,8 +18,8 @@
 | Script ID | `1GmeYflfMpRa1iTVgFHRD6K1DMoxc9OoKqpuucPJXgNZ9XBK06O7wgDkO` |
 | Identifier di app | `CoreLib` |
 | Runtime | Apps Script V8, timezone `Asia/Jakarta` |
-| Versi kode saat ini | **v2.3.0** (2026-09-19) |
-| Versi library tersimpan | **15 = v2.3.0** (disimpan 2026-09-19; URL `/library/d/1GmeYflf…/15`) |
+| Versi kode saat ini | **v2.4.0 DRAFT** (2026-09-22) |
+| Versi library tersimpan | **15 = v2.3.0** (live) → next **16 = v2.4.0** (draft, belum save) |
 
 ### Aplikasi konsumen
 
@@ -39,9 +40,9 @@
 |---|---|
 | `appsscript.json` | Manifest: runtime V8, timezone, oauth scopes |
 | `01_CoreFoundation.gs` | Engine database Google Sheets (physical row index, `toAlignedRow_`), caching ber-namespace + TTL, parser tanggal ISO-8601, **§7b util tanggal sadar-WIB (`todayIsoLocal_`, `dateKey10_`)**, **§11b util publik v2.3.0 (`paginate_`, `matchSearch_`)**, helper SIMPEG (level jabatan, unit bawahan), logger |
-| `02_CoreGateway.gs` | Auth bridge SSO (tiket → token sesi HMAC), `checkAuth`, role guard (`requireRole_`, `getRoleForEmail_`, `levelOf_`), `dispatchAction` + declarative resource router, whitelist config |
-| `03_CoreServices.gs` | Layanan siap pakai: CRUD generik (`apiSave`/`apiDelete`), config service, `executeAppSetup` (pembuatan sheet + folder Drive), resolusi pegawai |
-| `99_CoreTest.gs` | Test suite diagnostik: `testAll()` (43 test total, PASS 42 + SKIP 1), `runCoreTests(ctx)`, `cekUpdateCorelib()` |
+| `02_CoreGateway.gs` | Auth bridge SSO (tiket → token sesi HMAC), `checkAuth`, role guard (`requireRole_`, `getRoleForEmail_`, `levelOf_`), `dispatchAction` + declarative resource router, whitelist config, **§5b v2.4.0 `validateTransition_` + `assertOwnership_`** |
+| `03_CoreServices.gs` | Layanan siap pakai: CRUD generik (`apiSave`/`apiDelete`), config service, `executeAppSetup` (pembuatan sheet + folder Drive), resolusi pegawai, **§3b v2.4.0 tema dinamis `getThemeConfig_`/`buildThemeCss_`** |
+| `99_CoreTest.gs` | Test suite diagnostik: `testAll()` (**46 test total, PASS 45 + SKIP 1**), `runCoreTests(ctx)`, `cekUpdateCorelib()` |
 
 ### Yang HANYA ada di GitHub (JANGAN dimasukkan ke GAS CoreLib)
 
@@ -122,6 +123,29 @@ Aditif murni — util baru, tanpa perubahan perilaku lama.
 
 Verifikasi live 2026-09-19: `testAll()` → **PASS 42 / FAIL 0 / SKIP 1**. Versi library tersimpan = **15**.
 
+### v2.4.0 DRAFT (2026-09-22) — Workflow + Ownership + Tema ⭐ — **BELUM SAVE, REVIEW ONLY**
+
+Aditif murni — 3 util baru untuk 5 app (menu "Saya" + tema dinamis). Tanpa perubahan perilaku lama.
+
+| Kode | Fungsi Publik | Internal | Deskripsi |
+|---|---|---|---|
+| **C5** | `assertOwnership(actor, ownerId, opts)` | `assertOwnership_()` + `checkOwnership_()` | Guard kepemilikan baris: `actor.pegawai_id === ownerId` atau admin/super bypass. `opts.allowAdminBypass` (default true). Throw `Anda hanya boleh mengelola data milik sendiri.` bila bukan pemilik. Untuk menu "Saya" di luar declarative router (manual `apiSave`). |
+| **C4** | `validateTransition(cur, tgt, map, isAdmin)` | `validateTransition_()` | Validasi perpindahan status workflow case-insensitive. `isAdmin=true` → bypass. Map mis. `{draft:['baru','batal'], baru:['diproses','batal'], diproses:['selesai','batal']}`. Throw `Transisi "draft → selesai" tidak diizinkan.` |
+| **C8** | `getThemeConfig(store)` | `getThemeConfig_()` | Baca tema dari `ScriptProperties`: `THEME_JSON` (JSON custom atau code) → `THEME_CODE` legacy → `emerald` default. Return objek tema lengkap `{code, primary, primaryDark, ...}` cermin `AppCore.themes` (6 preset). |
+| **C8** | `buildThemeCss(theme)` + `getThemeCss(store)` | `buildThemeCss_()` / `getThemeCss_()` | Bangun CSS `:root{--primary:#...}` untuk inject `<?!= getThemeCss() ?>` di `Index.html` atau via `google.script.run`. |
+
+**Cara pakai di app:**
+```js
+// 01_ConfigAndBridge.gs — inject tema Opsi B
+function getThemeCss() { return CoreLib.getThemeCss(PropertiesService.getScriptProperties()); }
+
+// 02_AppLogic.gs — guard manual
+CoreLib.assertOwnership(session.user, row.pegawai_id); // throw bila bukan pemilik
+CoreLib.validateTransition(row.status, 'diproses', STATUS_MAP, session.user.role === 'admin');
+```
+
+Target verifikasi: `testAll()` → **PASS 45 / FAIL 0 / SKIP 1** (tambah 3 test: `testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`). Versi library next = **16**.
+
 ---
 
 ## 4. Script Properties
@@ -150,13 +174,13 @@ Verifikasi live 2026-09-19: `testAll()` → **PASS 42 / FAIL 0 / SKIP 1**. Versi
 
 | Fungsi | Kegunaan | Hasil yang diharapkan |
 |---|---|---|
-| **`testAll()`** | Test lengkap resmi (**43 test total**, termasuk akses spreadsheet) | **`PASS: 42 / FAIL: 0 / SKIP: 1`** — SKIP = `testCacheIsolation` (butuh `TEST_SPREADSHEET_ID_B`) |
-| `cekUpdateCorelib()` | Diagnostik cepat: fungsi v2.2/v2.3.0 tersedia? properti benar? | Semua ✅. Baris `❌ CoreLib is not defined` **normal** bila dijalankan di dalam proyek CoreLib sendiri (library tidak me-reference dirinya sendiri) |
-| `runCoreTests()` langsung | Tanpa `ctx` → `ctx = {}` | `PASS: 21 / FAIL: 0 / SKIP: 22` — test database otomatis SKIP. Bukan pengganti `testAll()` |
+| **`testAll()`** | Test lengkap resmi (**46 test total**, termasuk akses spreadsheet) | **`PASS: 45 / FAIL: 0 / SKIP: 1`** — SKIP = `testCacheIsolation` (butuh `TEST_SPREADSHEET_ID_B`) |
+| `cekUpdateCorelib()` | Diagnostik cepat: fungsi v2.2/v2.3.0/v2.4.0 tersedia? properti benar? | Semua ✅. Baris `❌ CoreLib is not defined` **normal** bila dijalankan di dalam proyek CoreLib sendiri (library tidak me-reference dirinya sendiri) |
+| `runCoreTests()` langsung | Tanpa `ctx` → `ctx = {}` | `PASS: 21 / FAIL: 0 / SKIP: 25` — test database otomatis SKIP. Bukan pengganti `testAll()` |
 
-Setiap rilis wajib: `testAll()` → **FAIL: 0** + `[PASS] testRoleGateV222` + `[PASS] testTodayIsoLocalV230` / `[PASS] testDateKey10V230` / `[PASS] testPaginateV230` / `[PASS] testMatchSearchV230`.
+Setiap rilis wajib: `testAll()` → **FAIL: 0** + `[PASS] testRoleGateV222` + `[PASS] testTodayIsoLocalV230` / `[PASS] testDateKey10V230` / `[PASS] testPaginateV230` / `[PASS] testMatchSearchV230` + `[PASS] testAssertOwnershipV240` / `[PASS] testValidateTransitionV240` / `[PASS] testThemeConfigV240`.
 
-### Distribusi 43 test
+### Distribusi 46 test
 
 | Grup | Jumlah | Keterangan |
 |---|---|---|
@@ -166,13 +190,14 @@ Setiap rilis wajib: `testAll()` → **FAIL: 0** + `[PASS] testRoleGateV222` + `[
 | v2.2 | 9 | Util publik baru (norm/parse/whitelist/validate/genUnique/requireRole/checkRole/getRoleForEmail/isAllowedConfigKey) |
 | v2.2.2 | 1 | Regresi fail-closed `levelOf_` (`testRoleGateV222`) |
 | **v2.3.0** | **4** | **`testTodayIsoLocalV230`, `testDateKey10V230`, `testPaginateV230`, `testMatchSearchV230`** |
-| **Total** | **43** | PASS 42 + SKIP 1 (cacheIsolation) |
+| **v2.4.0** | **3** | **`testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`** |
+| **Total** | **46** | PASS 45 + SKIP 1 (cacheIsolation) |
 
 ---
 
 ## 6. Prosedur Rilis (deploy perubahan CoreLib)
 
-1. Ubah file di repo ini (`frontend-cdn/backend/`) — workspace = sumber kebenaran.
+1. Ubah file di repo ini (`LIbrary-CoreLib/src/`) — workspace = sumber kebenaran.
 2. Paste file yang berubah ke editor GAS CoreLib (whole-file, jangan find-replace manual).
 3. Jalankan `testAll()` → pastikan `FAIL: 0`.
 4. **Simpan versi library baru** (versi akan bertambah: 13, 14, 15, dst).
@@ -239,11 +264,23 @@ Daftar fungsi yang bisa dipanggil via `CoreLib.xxx` dari aplikasi konsumen.
 | `CoreLib.paginate(rows, page, limit)` | Potong array untuk paginasi server-side |
 | `CoreLib.matchSearch(row, q, fields)` | Cek substring case-insensitive pada beberapa field |
 
-### Kandidat promosi berikutnya (v2.4.0+)
+### Workflow & Ownership (v2.4.0) ⭐ — SUDAH MASUK DRAFT
+| Fungsi | Deskripsi |
+|---|---|
+| `CoreLib.assertOwnership(actor, ownerId, opts)` | Guard kepemilikan baris (throw bila bukan pemilik, admin bypass). |
+| `CoreLib.checkOwnership(actor, ownerId, opts)` | Versi non-throw: `{allowed, error}`. |
+| `CoreLib.validateTransition(cur, tgt, map, isAdmin)` | Validasi peta status workflow (case-insensitive, isAdmin bypass). |
+
+### Tema Dinamis (v2.4.0 / C8) ⭐ — SUDAH MASUK DRAFT
+| Fungsi | Deskripsi |
+|---|---|
+| `CoreLib.getThemeConfig(store)` | Baca tema dari `THEME_JSON`/`THEME_CODE` → objek tema lengkap. |
+| `CoreLib.buildThemeCss(theme)` | Bangun CSS `:root{--primary:...}` dari objek/code. |
+| `CoreLib.getThemeCss(store)` | Baca + bangun CSS sekali panggil (untuk `<?!= getThemeCss() ?>`). |
+
+### Kandidat promosi berikutnya (v2.5.0+)
 | Kode | Kandidat | Status |
 |---|---|---|
-| C4 | `validateTransition(sekarang, tujuan, peta, isAdmin)` | Antre |
-| C5 | `assertOwnership(actor, rowPegawaiId, opts)` | Antre |
 | C6 | `periodeBulan` / `dalamPeriode` / `hitungHariKerja` | Antre |
 | C7 | `findUnique` / `upsertUnique` by unique-key | Antre |
-| C8 | Keputusan mazhab config/profil/AUDIT (BUKAN fungsi baru) | Diskusi |
+| C9 | `auditLog` helper terpusat? | Diskusi |
