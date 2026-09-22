@@ -1,5 +1,8 @@
 // ============================================================
-// CORE LIBRARY GLOBAL v2.3.0 - 99_CoreTest.gs
+// CORE LIBRARY GLOBAL v2.4.0 - 99_CoreTest.gs
+// Changelog v2.4.0 (2026-09-22) — C4/C5/C8 DRAFT:
+// - TEST BARU (3): testAssertOwnershipV240, testValidateTransitionV240,
+//   testThemeConfigV240 — regresi C4/C5/C8. Target testAll: PASS 45 / FAIL 0 / SKIP 1.
 // Changelog v2.3.0 (2026-09-19):
 // - TEST BARU (4): testTodayIsoLocalV230, testDateKey10V230,
 //   testPaginateV230, testMatchSearchV230 — regresi util publik
@@ -74,7 +77,9 @@ function runCoreTests(ctx) {
     testRoleGateV222,
     // v2.3.0 baru (C1/C2/C3)
     testTodayIsoLocalV230, testDateKey10V230,
-    testPaginateV230, testMatchSearchV230
+    testPaginateV230, testMatchSearchV230,
+    // v2.4.0 baru (C4/C5/C8)
+    testAssertOwnershipV240, testValidateTransitionV240, testThemeConfigV240
   ];
   var passed = 0, failed = 0, skipped = 0, details = [];
   tests.forEach(function(fn) {
@@ -946,6 +951,164 @@ function testMatchSearchV230(ctx) {
 
   // 7. Wrapper publik
   assert_(matchSearch(row, 'patroli', ['deskripsi']) === true, 'public matchSearch.');
+}
+
+// ==================== v2.4.0 TEST BARU (C4/C5/C8) ====================
+
+// C5: assertOwnership_() & checkOwnership_()
+function testAssertOwnershipV240(ctx) {
+  var admin = { role: 'admin', pegawai_id: 'PEG-ADMIN' };
+  var userA = { role: 'user', pegawai_id: 'PEG-A', id: 'PEG-A' };
+  var userB = { role: 'user', pegawai_id: 'PEG-B' };
+  var viewer = { role: 'viewer', pegawai_id: 'PEG-A' };
+
+  // 1. Pemilik sendiri lolos
+  assert_(assertOwnership_(userA, 'PEG-A') === true, 'assertOwnership pemilik lolos.');
+
+  // 2. Bukan pemilik → throw
+  var threw = false;
+  try { assertOwnership_(userA, 'PEG-B'); } catch (e) { threw = e.message.indexOf('milik sendiri') !== -1; }
+  assert_(threw, 'assertOwnership bukan pemilik ditolak.');
+
+  // 3. Admin bypass (default allowAdminBypass=true)
+  assert_(assertOwnership_(admin, 'PEG-B') === true, 'assertOwnership admin bypass.');
+  assert_(assertOwnership_({ role: 'super', pegawai_id: 'X' }, 'PEG-B') === true, 'assertOwnership super bypass.');
+
+  // 4. Admin bypass dimatikan → admin juga ditolak bila bukan pemilik
+  var threw2 = false;
+  try { assertOwnership_(admin, 'PEG-B', { allowAdminBypass: false }); } catch (e) { threw2 = true; }
+  assert_(threw2, 'assertOwnership admin tanpa bypass ditolak.');
+
+  // 5. checkOwnership versi non-throw
+  var ok = checkOwnership_(userA, 'PEG-A');
+  assert_(ok.allowed === true, 'checkOwnership allowed.');
+  var nok = checkOwnership_(userA, 'PEG-B');
+  assert_(nok.allowed === false && nok.error, 'checkOwnership denied + error.');
+
+  // 6. Actor tanpa pegawai_id → error
+  var threw3 = false;
+  try { assertOwnership_({ role: 'user' }, 'PEG-A'); } catch (e) { threw3 = e.message.indexOf('pegawai_id') !== -1; }
+  assert_(threw3, 'assertOwnership actor tanpa pegawai_id ditolak.');
+
+  // 7. ownerId kosong → error
+  var threw4 = false;
+  try { assertOwnership_(userA, ''); } catch (e) { threw4 = e.message.indexOf('pemilik') !== -1; }
+  assert_(threw4, 'assertOwnership ownerId kosong ditolak.');
+
+  // 8. Wrapper publik
+  assert_(assertOwnership(userA, 'PEG-A') === true, 'public assertOwnership.');
+  assert_(checkOwnership(userA, 'PEG-B').allowed === false, 'public checkOwnership.');
+
+  // 9. Viewer yang kebetulan pemilik → lolos (role viewer tapi pemilik)
+  assert_(assertOwnership_(viewer, 'PEG-A') === true, 'assertOwnership viewer-pemilik lolos (bukan cek role, hanya kepemilikan).');
+}
+
+// C4: validateTransition_()
+function testValidateTransitionV240(ctx) {
+  var peta = {
+    draft: ['baru', 'batal'],
+    baru: ['diproses', 'batal'],
+    diproses: ['selesai', 'batal'],
+    selesai: [],
+    batal: []
+  };
+
+  // 1. Transisi valid
+  assert_(validateTransition_('draft', 'baru', peta, false) === true, 'validateTransition draft→baru valid.');
+  assert_(validateTransition_('baru', 'diproses', peta, false) === true, 'validateTransition baru→diproses valid.');
+  assert_(validateTransition_('diproses', 'selesai', peta, false) === true, 'validateTransition diproses→selesai valid.');
+
+  // 2. Case-insensitive
+  assert_(validateTransition_('DRAFT', 'BARU', peta, false) === true, 'validateTransition case-insensitive.');
+  assert_(validateTransition_('Draft', 'Batal', peta, false) === true, 'validateTransition Draft→Batal.');
+
+  // 3. Sama status → lolos (no-op)
+  assert_(validateTransition_('baru', 'baru', peta, false) === true, 'validateTransition same status lolos.');
+
+  // 4. Transisi tidak diizinkan → throw
+  var threw = false;
+  try { validateTransition_('draft', 'selesai', peta, false); } catch (e) { threw = e.message.indexOf('tidak diizinkan') !== -1; }
+  assert_(threw, 'validateTransition draft→selesai ditolak.');
+
+  var threw2 = false;
+  try { validateTransition_('selesai', 'baru', peta, false); } catch (e) { threw2 = true; }
+  assert_(threw2, 'validateTransition selesai→baru ditolak.');
+
+  // 5. Status tidak dikenal → throw
+  var threw3 = false;
+  try { validateTransition_('status_ngawur', 'baru', peta, false); } catch (e) { threw3 = e.message.indexOf('tidak dikenal') !== -1; }
+  assert_(threw3, 'validateTransition status tidak dikenal ditolak.');
+
+  // 6. Peta tidak valid → throw
+  var threw4 = false;
+  try { validateTransition_('draft', 'baru', null, false); } catch (e) { threw4 = true; }
+  assert_(threw4, 'validateTransition peta null ditolak.');
+
+  // 7. isAdmin bypass → lolos walau peta melarang
+  assert_(validateTransition_('draft', 'selesai', peta, true) === true, 'validateTransition isAdmin bypass.');
+  assert_(validateTransition_('selesai', 'draft', peta, true) === true, 'validateTransition super bypass.');
+
+  // 8. Wrapper publik
+  assert_(validateTransition('draft', 'baru', peta, false) === true, 'public validateTransition.');
+
+  // 9. Kosong → throw
+  var threw5 = false;
+  try { validateTransition_('', 'baru', peta, false); } catch (e) { threw5 = true; }
+  assert_(threw5, 'validateTransition current kosong ditolak.');
+}
+
+// C8: getThemeConfig_() & buildThemeCss_()
+function testThemeConfigV240(ctx) {
+  // Mock Properties store
+  var mockStore = {
+    _data: {},
+    getProperty: function(k) { return this._data[k] || null; },
+    setProperty: function(k, v) { this._data[k] = v; }
+  };
+
+  // 1. Default bila kosong → emerald
+  var def = getThemeConfig_(mockStore);
+  assert_(def.code === 'emerald' && def.primary === '#059669', 'getThemeConfig default emerald.');
+
+  // 2. THEME_CODE legacy
+  mockStore._data.THEME_CODE = 'sky';
+  var sky = getThemeConfig_(mockStore);
+  assert_(sky.code === 'sky' && sky.primary === '#0284c7', 'getThemeConfig THEME_CODE sky.');
+  mockStore._data.THEME_CODE = '';
+
+  // 3. THEME_JSON sebagai code string
+  mockStore._data.THEME_JSON = 'amber';
+  var amber = getThemeConfig_(mockStore);
+  assert_(amber.code === 'amber' && amber.primary === '#d97706', 'getThemeConfig THEME_JSON code amber.');
+
+  // 4. THEME_JSON sebagai JSON object custom
+  mockStore._data.THEME_JSON = JSON.stringify({ code: 'custom', primary: '#ff0000', primaryDark: '#cc0000', primaryLight: '#fff0f0', primaryLighter: '#ffe0e0', primaryText: '#660000', primaryAccent: '#ff6666', primaryRgb: '255, 0, 0', label: 'Custom Red' });
+  var custom = getThemeConfig_(mockStore);
+  assert_(custom.primary === '#ff0000' && custom.code === 'custom', 'getThemeConfig custom JSON.');
+
+  // 5. THEME_JSON invalid → fallback default
+  mockStore._data.THEME_JSON = 'not-json-{{';
+  var fallback = getThemeConfig_(mockStore);
+  assert_(fallback.code === 'emerald', 'getThemeConfig invalid JSON fallback.');
+
+  // 6. buildThemeCss_ dari code
+  var cssEmerald = buildThemeCss_('emerald');
+  assert_(cssEmerald.indexOf('--primary:#059669') !== -1, 'buildThemeCss emerald.');
+  assert_(cssEmerald.indexOf(':root') === 0, 'buildThemeCss diawali :root.');
+
+  // 7. buildThemeCss_ dari object
+  var cssCustom = buildThemeCss_(custom);
+  assert_(cssCustom.indexOf('--primary:#ff0000') !== -1, 'buildThemeCss custom.');
+
+  // 8. getThemeCss_ (store → css)
+  mockStore._data.THEME_JSON = 'violet';
+  var cssViaStore = getThemeCss_(mockStore);
+  assert_(cssViaStore.indexOf('--primary:#7c3aed') !== -1, 'getThemeCss via store violet.');
+
+  // 9. Wrapper publik
+  assert_(getThemeConfig(mockStore).code === 'violet', 'public getThemeConfig.');
+  assert_(buildThemeCss('teal').indexOf('--primary:#0d9488') !== -1, 'public buildThemeCss.');
+  assert_(getThemeCss(mockStore).indexOf(':root') === 0, 'public getThemeCss.');
 }
 
 // ==================== RUNNER & HELPERS ====================
