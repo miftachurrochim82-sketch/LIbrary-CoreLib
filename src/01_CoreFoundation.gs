@@ -1,5 +1,8 @@
 // ============================================================
-// CORE LIBRARY GLOBAL v2.3.0 - 01_CoreFoundation.gs
+// CORE LIBRARY GLOBAL v2.4.0 - 01_CoreFoundation.gs
+// Changelog v2.4.0 (2026-09-22):
+// - Sinkron rilis v2.4.0 (C4/C5 di 02_CoreGateway, C8 di 03_CoreServices).
+//   Tanpa perubahan fungsional di berkas ini selain bump header.
 // Changelog v2.3.0 (2026-09-19):
 // - ADD (C3) — FIX UTC vs WIB: todayIsoLocal_() & dateKey10_() publik.
 //   todayIso() LAMA memakai UTC — mundur 1 hari untuk user WIB sebelum
