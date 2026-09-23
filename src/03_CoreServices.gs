@@ -1,5 +1,11 @@
 // ============================================================
-// CORE LIBRARY GLOBAL v2.3.0 - 03_CoreServices.gs
+// CORE LIBRARY GLOBAL v2.4.0 - 03_CoreServices.gs
+// Changelog v2.4.0 (2026-09-22) — C8 DRAFT:
+// - ADD (C8): THEME_PRESETS_ (6 preset cermin AppCore.themes) + getThemeConfig_(store)
+//   + buildThemeCss_(themeOrCode) + getThemeCss_(store) — baca THEME_JSON/THEME_CODE
+//   dari ScriptProperties lalu bangun :root CSS. Dipakai Opsi B tema dinamis
+//   via <app-theme-picker> + <?!= getThemeCss() ?> di Index.html.
+// - Wrapper publik: getThemeConfig, buildThemeCss, getThemeCss.
 // Changelog v2.3.0 (2026-09-19):
 // - Sinkron rilis v2.3.0 (C1/C2/C3 ditambahkan di 01_CoreFoundation.gs).
 //   Tanpa perubahan fungsional di berkas ini.
@@ -259,6 +265,103 @@ function saveConfigItem(ssId, data, actor, headersMap, allowedKeys) {
   finally { try { lock.releaseLock(); } catch (e) {} }
 }
 
+// ==================== 3b. TEMA DINAMIS (v2.4.0 / C8) ====================
+// Cermin AppCore.themes (frontend CDN v2.9.0) — 6 preset + custom JSON.
+// Disimpan di ScriptProperties: THEME_JSON (prioritas) → THEME_CODE (legacy) → 'emerald'.
+
+var THEME_PRESETS_ = {
+  emerald: { code: 'emerald', primary: '#059669', primaryDark: '#047857', primaryLight: '#ecfdf5', primaryLighter: '#d1fae5', primaryText: '#064e3b', primaryAccent: '#34d399', primaryRgb: '5, 150, 105', label: 'Emerald' },
+  sky:     { code: 'sky',     primary: '#0284c7', primaryDark: '#0369a1', primaryLight: '#f0f9ff', primaryLighter: '#e0f2fe', primaryText: '#0c4a6e', primaryAccent: '#38bdf8', primaryRgb: '2, 132, 199', label: 'Sky' },
+  amber:   { code: 'amber',   primary: '#d97706', primaryDark: '#b45309', primaryLight: '#fffbeb', primaryLighter: '#fef3c7', primaryText: '#78350f', primaryAccent: '#fbbf24', primaryRgb: '217, 119, 6', label: 'Amber' },
+  violet:  { code: 'violet',  primary: '#7c3aed', primaryDark: '#6d28d9', primaryLight: '#f5f3ff', primaryLighter: '#ede9fe', primaryText: '#4c1d95', primaryAccent: '#a78bfa', primaryRgb: '124, 58, 237', label: 'Violet' },
+  rose:    { code: 'rose',    primary: '#e11d48', primaryDark: '#be123c', primaryLight: '#fff1f2', primaryLighter: '#ffe4e6', primaryText: '#881337', primaryAccent: '#fb7185', primaryRgb: '225, 29, 72', label: 'Rose' },
+  teal:    { code: 'teal',    primary: '#0d9488', primaryDark: '#0f766e', primaryLight: '#f0fdfa', primaryLighter: '#ccfbf1', primaryText: '#134e4a', primaryAccent: '#2dd4bf', primaryRgb: '13, 148, 136', label: 'Teal' }
+};
+var DEFAULT_THEME_CODE_ = 'emerald';
+
+/**
+ * C8 — getThemeConfig_(store)
+ * Baca tema dari ScriptProperties. Urutan: THEME_JSON → THEME_CODE → default.
+ * Return SELALU objek tema lengkap (tidak pernah null).
+ *
+ * @param {Properties} store - PropertiesService.getScriptProperties() dari APP (bukan library). Jika null, pakai library props.
+ * @returns {Object} tema { code, primary, primaryDark, ... }
+ */
+function getThemeConfig_(store) {
+  var st;
+  try { st = store || PropertiesService.getScriptProperties(); } catch (e) { st = null; }
+  var rawJson = st ? st.getProperty('THEME_JSON') : '';
+  var rawCode = st ? st.getProperty('THEME_CODE') : '';
+  // 1. Coba THEME_JSON (bisa preset code string atau JSON object)
+  if (rawJson) {
+    var trimmed = String(rawJson).trim();
+    // Jika JSON adalah preset code string tanpa kurung, mis. "sky"
+    if (THEME_PRESETS_[trimmed]) return THEME_PRESETS_[trimmed];
+    // Jika JSON string diawali "{" → parse sebagai custom object
+    if (trimmed.charAt(0) === '{') {
+      try {
+        var obj = JSON.parse(trimmed);
+        if (obj && obj.primary) {
+          // Merge dengan default preset untuk field yang kosong
+          var base = THEME_PRESETS_[obj.code] || THEME_PRESETS_[DEFAULT_THEME_CODE_];
+          return {
+            code: obj.code || 'custom',
+            primary: obj.primary || base.primary,
+            primaryDark: obj.primaryDark || obj.primary || base.primaryDark,
+            primaryLight: obj.primaryLight || base.primaryLight,
+            primaryLighter: obj.primaryLighter || base.primaryLighter,
+            primaryText: obj.primaryText || base.primaryText,
+            primaryAccent: obj.primaryAccent || base.primaryAccent,
+            primaryRgb: obj.primaryRgb || base.primaryRgb,
+            label: obj.label || base.label
+          };
+        }
+      } catch (e) { /* fallthrough */ }
+    }
+    // Jika trimmed adalah code valid tapi tersimpan sebagai JSON string quote
+    try {
+      var parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'string' && THEME_PRESETS_[parsed]) return THEME_PRESETS_[parsed];
+    } catch (e) {}
+  }
+  // 2. Fallback THEME_CODE legacy
+  if (rawCode && THEME_PRESETS_[String(rawCode).trim()]) return THEME_PRESETS_[String(rawCode).trim()];
+  // 3. Default
+  return THEME_PRESETS_[DEFAULT_THEME_CODE_];
+}
+
+/**
+ * C8 — buildThemeCss_(themeOrCode)
+ * Bangun CSS :root untuk inject di Index.html (<?!= getThemeCss() ?>) atau via JS.
+ *
+ * @param {Object|string} themeOrCode - objek tema atau code string
+ * @returns {string} CSS string
+ */
+function buildThemeCss_(themeOrCode) {
+  var t = null;
+  if (typeof themeOrCode === 'string') t = THEME_PRESETS_[themeOrCode] || getThemeConfig_();
+  else if (themeOrCode && typeof themeOrCode === 'object' && themeOrCode.primary) t = themeOrCode;
+  else t = getThemeConfig_();
+  return ':root{'
+    + '--primary:' + t.primary + ';'
+    + '--primary-dark:' + (t.primaryDark || t.primary) + ';'
+    + '--primary-light:' + t.primaryLight + ';'
+    + '--primary-lighter:' + t.primaryLighter + ';'
+    + '--primary-text:' + t.primaryText + ';'
+    + '--primary-accent:' + t.primaryAccent + ';'
+    + '--primary-rgb:' + t.primaryRgb + ';'
+    + '}';
+}
+
+/**
+ * C8 — getThemeCss_(store)
+ * Helper untuk dipanggil dari template HTML: <?!= getThemeCss() ?>
+ * Membaca config dari store app lalu bangun CSS.
+ */
+function getThemeCss_(store) {
+  return buildThemeCss_(getThemeConfig_(store));
+}
+
 // ==================== 4. PROVISIONING ====================
 // H10: ID tersimpan-yang-rusak = ERROR (jangan ganti diam-diam). ID kosong = buat baru.
 function ensureDriveFolder(folderId, folderName, parentFolder) {
@@ -322,6 +425,10 @@ function resolveProps_(params) {
   logError('CoreSetup', '⛔ params.props TIDAK dioper! Properti akan tertulis ke store LIBRARY (dipakai bersama). Oper PropertiesService.getScriptProperties() dari kode aplikasi.');
   return PropertiesService.getScriptProperties();
 }
+
+function getThemeConfig(store) { return getThemeConfig_(store); }
+function buildThemeCss(themeOrCode) { return buildThemeCss_(themeOrCode); }
+function getThemeCss(store) { return getThemeCss_(store); }
 
 function executeAppSetup(params) {
   var lock = LockService.getScriptLock();

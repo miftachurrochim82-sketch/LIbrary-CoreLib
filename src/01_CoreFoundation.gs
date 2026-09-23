@@ -1,5 +1,11 @@
 // ============================================================
-// CORE LIBRARY GLOBAL v2.3.0 - 01_CoreFoundation.gs
+// CORE LIBRARY GLOBAL v2.4.0 - 01_CoreFoundation.gs
+// Changelog v2.4.0 (2026-09-22) — A+B DRAFT:
+// - ADD (C6): periodeBulan_(), dalamPeriode_(), hitungHariKerja_() — util periode & hari kerja
+//   untuk rekap piramida bulanan (Laporan/Analisa/Evaluasi) + wrapper publik.
+// - ADD (C7): findUnique_(), upsertUnique_() — cari & upsert by field unik (mis. nip, kode_laporan)
+//   dengan cek duplikat PK berbeda + wrapper publik. Delegasi ke apiSave.
+// - Sinkron C4/C5 di 02_CoreGateway, C8 di 03_CoreServices.
 // Changelog v2.3.0 (2026-09-19):
 // - ADD (C3) — FIX UTC vs WIB: todayIsoLocal_() & dateKey10_() publik.
 //   todayIso() LAMA memakai UTC — mundur 1 hari untuk user WIB sebelum
@@ -353,10 +359,16 @@ function parseTanggalBackend(val) {
     if (!val) return null;
     if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
     var str = String(val).trim();
+    if (!str) return null;
+    // ISO datetime dengan T atau Z → coba Date parse dulu (paling akurat)
     if (str.indexOf('T') !== -1) { var d = new Date(str); if (!isNaN(d.getTime())) return d; }
+    // Format 'yyyy-MM-dd' atau 'yyyy-MM-dd HH:mm[:ss]' (spasi) → ambil bagian tanggal saja
     if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-      var p = str.split('T')[0].split('-');
-      return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      var datePart = str.split(' ')[0].split('T')[0]; // '2026-09-19' dari '2026-09-19 14:30' atau '2026-09-19T...'
+      var p = datePart.split('-');
+      var y = Number(p[0]), m = Number(p[1]), dd = Number(p[2]);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(dd)) return new Date(y, m - 1, dd);
+      return null;
     }
     var ps = str.split(' ')[0].split('/');
     if (ps.length === 3) return new Date(Number(ps[2]), Number(ps[1]) - 1, Number(ps[0]));
@@ -974,3 +986,177 @@ function paginate(rows, page, limit) { return paginate_(rows, page, limit); }
 
 /** Cek substring case-insensitive pada beberapa field. */
 function matchSearch(row, q, fields) { return matchSearch_(row, q, fields); }
+
+// ============================================================
+// §11d UTIL PUBLIK v2.4.0 (C6) — Periode & Hari Kerja
+// ============================================================
+
+/**
+ * periodeBulan_(val) — kembalikan kunci periode 'yyyy-MM' dari nilai tanggal.
+ * Gunakan untuk grouping laporan piramida per bulan.
+ *
+ * @param {*} val - Date, ISO, dd/MM/yyyy, atau 'yyyy-MM-dd'
+ * @returns {string} 'yyyy-MM' atau '' bila tidak valid
+ */
+function periodeBulan_(val) {
+  var key = dateKey10_(val);
+  return key ? key.slice(0, 7) : '';
+}
+
+/**
+ * dalamPeriode_(val, periode) — cek apakah tanggal val berada dalam periode.
+ *
+ * @param {*} val - tanggal yang dicek
+ * @param {*} periode - 'yyyy-MM' atau 'yyyy-MM-dd' atau {start,end} atau Date
+ * @returns {boolean}
+ */
+function dalamPeriode_(val, periode) {
+  if (!val || !periode) return false;
+  var d = parseTanggalBackend(val);
+  if (!d || isNaN(d.getTime())) return false;
+  // Periode sebagai string 'yyyy-MM' atau 'yyyy-MM-dd'
+  if (typeof periode === 'string') {
+    var p = String(periode).trim();
+    if (/^\d{4}-\d{2}$/.test(p)) {
+      return periodeBulan_(d) === p;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(p)) {
+      return dateKey10_(d) === p.slice(0,10);
+    }
+  }
+  // Periode sebagai object {start,end}
+  if (typeof periode === 'object' && periode.start && periode.end) {
+    var s = parseTanggalBackend(periode.start);
+    var e = parseTanggalBackend(periode.end);
+    if (!s || !e) return false;
+    return d.getTime() >= s.getTime() && d.getTime() <= e.getTime();
+  }
+  // Periode sebagai Date (samakan tanggal exact)
+  if (periode instanceof Date) {
+    return dateKey10_(d) === dateKey10_(periode);
+  }
+  return false;
+}
+
+/**
+ * hitungHariKerja_(start, end, holidays) — hitung hari kerja (Senin-Jumat)
+ * di antara dua tanggal inklusif, dikurangi libur nasional.
+ *
+ * @param {*} start - tanggal mulai (inklusif)
+ * @param {*} end - tanggal selesai (inklusif)
+ * @param {Array} holidays - array 'yyyy-MM-dd' atau Date
+ * @returns {number} 0 bila invalid atau start > end
+ */
+function hitungHariKerja_(start, end, holidays) {
+  var s = parseTanggalBackend(start);
+  var e = parseTanggalBackend(end);
+  if (!s || !e || isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+  // Normalisasi ke tengah malam lokal
+  s = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  e = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+  if (s.getTime() > e.getTime()) return 0;
+  var liburSet = {};
+  if (Array.isArray(holidays)) {
+    for (var i = 0; i < holidays.length; i++) {
+      var hk = dateKey10_(holidays[i]);
+      if (hk) liburSet[hk] = true;
+    }
+  }
+  var count = 0;
+  var cur = new Date(s);
+  while (cur.getTime() <= e.getTime()) {
+    var day = cur.getDay(); // 0=Min, 6=Sab
+    var key = dateKey10_(cur);
+    if (day !== 0 && day !== 6 && !liburSet[key]) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+// ============================================================
+// §11e UTIL PUBLIK v2.4.0 (C7) — Find/Upsert by Unique Key
+// ============================================================
+
+/**
+ * findUnique_(ssId, sheetName, field, value, headersMap, opts)
+ * Cari 1 record by field unik (case-insensitive untuk string).
+ * Return record atau null bila tidak ketemu. Tidak throw bila sheet kosong.
+ *
+ * @param {string} ssId
+ * @param {string} sheetName
+ * @param {string} field - nama kolom unik
+ * @param {*} value
+ * @param {Object} headersMap
+ * @param {Object} opts - { masterSsId, isRefFunc }
+ * @returns {Object|null}
+ */
+function findUnique_(ssId, sheetName, field, value, headersMap, opts) {
+  if (!ssId || !sheetName || !field) throw new Error('findUnique_ butuh ssId, sheetName, field.');
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  opts = opts || {};
+  // Selalu baca fresh (bypass cache) untuk cek unik — hindari false-negative akibat cache basi setelah upsert.
+  var rows = readRecordsNoLock(ssId, sheetName, headersMap, opts).filter(function(r){ return !r.deleted_at; });
+  var target = String(value).trim().toLowerCase();
+  for (var i = 0; i < rows.length; i++) {
+    var v = String(rows[i][field] || '').trim().toLowerCase();
+    if (v === target) return rows[i];
+  }
+  return null;
+}
+
+/**
+ * upsertUnique_(ssId, sheetName, uniqueField, record, actor, headersMap, opts)
+ * Insert atau update by uniqueField (bukan PK). Jika record dengan uniqueField sudah ada
+ * dengan PK berbeda → throw duplikat. Jika sudah ada dengan PK sama → update. Jika belum ada → insert.
+ *
+ * @param {string} ssId
+ * @param {string} sheetName
+ * @param {string} uniqueField - mis. 'kode_laporan' atau 'nip'
+ * @param {Object} record
+ * @param {Object} actor
+ * @param {Object} headersMap
+ * @param {Object} opts - { pkField, isRefFunc, masterSsId }
+ * @returns {Object} { success, data, isUpdate }
+ */
+function upsertUnique_(ssId, sheetName, uniqueField, record, actor, headersMap, opts) {
+  if (!uniqueField) throw new Error('upsertUnique_ butuh uniqueField.');
+  if (!record || typeof record !== 'object') throw new Error('upsertUnique_ record tidak valid.');
+  opts = opts || {};
+  var pkField = opts.pkField || 'id';
+  var val = record[uniqueField];
+  if (val === undefined || val === null || String(val).trim() === '') throw new Error('Field unik \"' + uniqueField + '\" wajib diisi.');
+  var existing = findUnique_(ssId, sheetName, uniqueField, val, headersMap, opts);
+  var recPk = getRecordPrimaryId_(record, pkField);
+  var existPk = existing ? getRecordPrimaryId_(existing, pkField) : '';
+  // Jika ada existing dengan PK berbeda → duplikat
+  if (existing && recPk && String(recPk).trim() !== String(existPk).trim()) {
+    throw new Error('Duplikat: \"' + uniqueField + '\" = \"' + val + '\" sudah dipakai record lain (' + existPk + ').');
+  }
+  if (existing && !recPk) {
+    // Record baru tanpa PK tapi unique sudah ada → anggap update existing (inject PK)
+    record[pkField] = existPk;
+  }
+  // Delegasi ke apiSave (yang sudah handle create/update + audit + cache)
+  var res = apiSave(ssId, sheetName, record, actor, headersMap, opts.isRefFunc, null, pkField);
+  if (!res.success) throw new Error(res.error || 'Gagal upsertUnique.');
+  return { success: true, data: res.data, isUpdate: !!existing };
+}
+
+// ============================================================
+// §11f PUBLIC API v2.4.0 (C6/C7) — wrapper tanpa underscore
+// ============================================================
+
+/** Kunci periode 'yyyy-MM' dari tanggal. */
+function periodeBulan(val) { return periodeBulan_(val); }
+
+/** Cek apakah tanggal berada dalam periode. */
+function dalamPeriode(val, periode) { return dalamPeriode_(val, periode); }
+
+/** Hitung hari kerja Senin-Jumat (inklusif) dikurangi libur. */
+function hitungHariKerja(start, end, holidays) { return hitungHariKerja_(start, end, holidays); }
+
+/** Cari record by field unik (null bila tidak ketemu). */
+function findUnique(ssId, sheetName, field, value, headersMap, opts) { return findUnique_(ssId, sheetName, field, value, headersMap, opts); }
+
+/** Insert/update by field unik (throw bila duplikat PK berbeda). */
+function upsertUnique(ssId, sheetName, uniqueField, record, actor, headersMap, opts) { return upsertUnique_(ssId, sheetName, uniqueField, record, actor, headersMap, opts); }

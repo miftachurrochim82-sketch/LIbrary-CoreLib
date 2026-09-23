@@ -1,5 +1,9 @@
 // ============================================================
-// CORE LIBRARY GLOBAL v2.3.0 - 99_CoreTest.gs
+// CORE LIBRARY GLOBAL v2.4.0 - 99_CoreTest.gs
+// Changelog v2.4.0 (2026-09-22) — A+B DRAFT (C4/C5/C6/C7/C8):
+// - TEST BARU (5): testAssertOwnershipV240, testValidateTransitionV240,
+//   testThemeConfigV240, testPeriodeHariKerjaV240, testFindUpsertUniqueV240
+//   — regresi C4/C5/C6/C7/C8. Target testAll: PASS 47 / FAIL 0 / SKIP 1.
 // Changelog v2.3.0 (2026-09-19):
 // - TEST BARU (4): testTodayIsoLocalV230, testDateKey10V230,
 //   testPaginateV230, testMatchSearchV230 — regresi util publik
@@ -74,7 +78,10 @@ function runCoreTests(ctx) {
     testRoleGateV222,
     // v2.3.0 baru (C1/C2/C3)
     testTodayIsoLocalV230, testDateKey10V230,
-    testPaginateV230, testMatchSearchV230
+    testPaginateV230, testMatchSearchV230,
+    // v2.4.0 baru (C4/C5/C6/C7/C8) — A+B
+    testAssertOwnershipV240, testValidateTransitionV240, testThemeConfigV240,
+    testPeriodeHariKerjaV240, testFindUpsertUniqueV240
   ];
   var passed = 0, failed = 0, skipped = 0, details = [];
   tests.forEach(function(fn) {
@@ -946,6 +953,267 @@ function testMatchSearchV230(ctx) {
 
   // 7. Wrapper publik
   assert_(matchSearch(row, 'patroli', ['deskripsi']) === true, 'public matchSearch.');
+}
+
+// ==================== v2.4.0 TEST BARU (C4/C5/C8) ====================
+
+// C5: assertOwnership_() & checkOwnership_()
+function testAssertOwnershipV240(ctx) {
+  var admin = { role: 'admin', pegawai_id: 'PEG-ADMIN' };
+  var userA = { role: 'user', pegawai_id: 'PEG-A', id: 'PEG-A' };
+  var userB = { role: 'user', pegawai_id: 'PEG-B' };
+  var viewer = { role: 'viewer', pegawai_id: 'PEG-A' };
+
+  // 1. Pemilik sendiri lolos
+  assert_(assertOwnership_(userA, 'PEG-A') === true, 'assertOwnership pemilik lolos.');
+
+  // 2. Bukan pemilik → throw
+  var threw = false;
+  try { assertOwnership_(userA, 'PEG-B'); } catch (e) { threw = e.message.indexOf('milik sendiri') !== -1; }
+  assert_(threw, 'assertOwnership bukan pemilik ditolak.');
+
+  // 3. Admin bypass (default allowAdminBypass=true)
+  assert_(assertOwnership_(admin, 'PEG-B') === true, 'assertOwnership admin bypass.');
+  assert_(assertOwnership_({ role: 'super', pegawai_id: 'X' }, 'PEG-B') === true, 'assertOwnership super bypass.');
+
+  // 4. Admin bypass dimatikan → admin juga ditolak bila bukan pemilik
+  var threw2 = false;
+  try { assertOwnership_(admin, 'PEG-B', { allowAdminBypass: false }); } catch (e) { threw2 = true; }
+  assert_(threw2, 'assertOwnership admin tanpa bypass ditolak.');
+
+  // 5. checkOwnership versi non-throw
+  var ok = checkOwnership_(userA, 'PEG-A');
+  assert_(ok.allowed === true, 'checkOwnership allowed.');
+  var nok = checkOwnership_(userA, 'PEG-B');
+  assert_(nok.allowed === false && nok.error, 'checkOwnership denied + error.');
+
+  // 6. Actor tanpa pegawai_id → error
+  var threw3 = false;
+  try { assertOwnership_({ role: 'user' }, 'PEG-A'); } catch (e) { threw3 = e.message.indexOf('pegawai_id') !== -1; }
+  assert_(threw3, 'assertOwnership actor tanpa pegawai_id ditolak.');
+
+  // 7. ownerId kosong → error
+  var threw4 = false;
+  try { assertOwnership_(userA, ''); } catch (e) { threw4 = e.message.indexOf('pemilik') !== -1; }
+  assert_(threw4, 'assertOwnership ownerId kosong ditolak.');
+
+  // 8. Wrapper publik
+  assert_(assertOwnership(userA, 'PEG-A') === true, 'public assertOwnership.');
+  assert_(checkOwnership(userA, 'PEG-B').allowed === false, 'public checkOwnership.');
+
+  // 9. Viewer yang kebetulan pemilik → lolos (role viewer tapi pemilik)
+  assert_(assertOwnership_(viewer, 'PEG-A') === true, 'assertOwnership viewer-pemilik lolos (bukan cek role, hanya kepemilikan).');
+}
+
+// C4: validateTransition_()
+function testValidateTransitionV240(ctx) {
+  var peta = {
+    draft: ['baru', 'batal'],
+    baru: ['diproses', 'batal'],
+    diproses: ['selesai', 'batal'],
+    selesai: [],
+    batal: []
+  };
+
+  // 1. Transisi valid
+  assert_(validateTransition_('draft', 'baru', peta, false) === true, 'validateTransition draft→baru valid.');
+  assert_(validateTransition_('baru', 'diproses', peta, false) === true, 'validateTransition baru→diproses valid.');
+  assert_(validateTransition_('diproses', 'selesai', peta, false) === true, 'validateTransition diproses→selesai valid.');
+
+  // 2. Case-insensitive
+  assert_(validateTransition_('DRAFT', 'BARU', peta, false) === true, 'validateTransition case-insensitive.');
+  assert_(validateTransition_('Draft', 'Batal', peta, false) === true, 'validateTransition Draft→Batal.');
+
+  // 3. Sama status → lolos (no-op)
+  assert_(validateTransition_('baru', 'baru', peta, false) === true, 'validateTransition same status lolos.');
+
+  // 4. Transisi tidak diizinkan → throw
+  var threw = false;
+  try { validateTransition_('draft', 'selesai', peta, false); } catch (e) { threw = e.message.indexOf('tidak diizinkan') !== -1; }
+  assert_(threw, 'validateTransition draft→selesai ditolak.');
+
+  var threw2 = false;
+  try { validateTransition_('selesai', 'baru', peta, false); } catch (e) { threw2 = true; }
+  assert_(threw2, 'validateTransition selesai→baru ditolak.');
+
+  // 5. Status tidak dikenal → throw
+  var threw3 = false;
+  try { validateTransition_('status_ngawur', 'baru', peta, false); } catch (e) { threw3 = e.message.indexOf('tidak dikenal') !== -1; }
+  assert_(threw3, 'validateTransition status tidak dikenal ditolak.');
+
+  // 6. Peta tidak valid → throw
+  var threw4 = false;
+  try { validateTransition_('draft', 'baru', null, false); } catch (e) { threw4 = true; }
+  assert_(threw4, 'validateTransition peta null ditolak.');
+
+  // 7. isAdmin bypass → lolos walau peta melarang
+  assert_(validateTransition_('draft', 'selesai', peta, true) === true, 'validateTransition isAdmin bypass.');
+  assert_(validateTransition_('selesai', 'draft', peta, true) === true, 'validateTransition super bypass.');
+
+  // 8. Wrapper publik
+  assert_(validateTransition('draft', 'baru', peta, false) === true, 'public validateTransition.');
+
+  // 9. Kosong → throw
+  var threw5 = false;
+  try { validateTransition_('', 'baru', peta, false); } catch (e) { threw5 = true; }
+  assert_(threw5, 'validateTransition current kosong ditolak.');
+}
+
+// C8: getThemeConfig_() & buildThemeCss_()
+function testThemeConfigV240(ctx) {
+  // Mock Properties store
+  var mockStore = {
+    _data: {},
+    getProperty: function(k) { return this._data[k] || null; },
+    setProperty: function(k, v) { this._data[k] = v; }
+  };
+
+  // 1. Default bila kosong → emerald
+  var def = getThemeConfig_(mockStore);
+  assert_(def.code === 'emerald' && def.primary === '#059669', 'getThemeConfig default emerald.');
+
+  // 2. THEME_CODE legacy
+  mockStore._data.THEME_CODE = 'sky';
+  var sky = getThemeConfig_(mockStore);
+  assert_(sky.code === 'sky' && sky.primary === '#0284c7', 'getThemeConfig THEME_CODE sky.');
+  mockStore._data.THEME_CODE = '';
+
+  // 3. THEME_JSON sebagai code string
+  mockStore._data.THEME_JSON = 'amber';
+  var amber = getThemeConfig_(mockStore);
+  assert_(amber.code === 'amber' && amber.primary === '#d97706', 'getThemeConfig THEME_JSON code amber.');
+
+  // 4. THEME_JSON sebagai JSON object custom
+  mockStore._data.THEME_JSON = JSON.stringify({ code: 'custom', primary: '#ff0000', primaryDark: '#cc0000', primaryLight: '#fff0f0', primaryLighter: '#ffe0e0', primaryText: '#660000', primaryAccent: '#ff6666', primaryRgb: '255, 0, 0', label: 'Custom Red' });
+  var custom = getThemeConfig_(mockStore);
+  assert_(custom.primary === '#ff0000' && custom.code === 'custom', 'getThemeConfig custom JSON.');
+
+  // 5. THEME_JSON invalid → fallback default
+  mockStore._data.THEME_JSON = 'not-json-{{';
+  var fallback = getThemeConfig_(mockStore);
+  assert_(fallback.code === 'emerald', 'getThemeConfig invalid JSON fallback.');
+
+  // 6. buildThemeCss_ dari code
+  var cssEmerald = buildThemeCss_('emerald');
+  assert_(cssEmerald.indexOf('--primary:#059669') !== -1, 'buildThemeCss emerald.');
+  assert_(cssEmerald.indexOf(':root') === 0, 'buildThemeCss diawali :root.');
+
+  // 7. buildThemeCss_ dari object
+  var cssCustom = buildThemeCss_(custom);
+  assert_(cssCustom.indexOf('--primary:#ff0000') !== -1, 'buildThemeCss custom.');
+
+  // 8. getThemeCss_ (store → css)
+  mockStore._data.THEME_JSON = 'violet';
+  var cssViaStore = getThemeCss_(mockStore);
+  assert_(cssViaStore.indexOf('--primary:#7c3aed') !== -1, 'getThemeCss via store violet.');
+
+  // 9. Wrapper publik
+  assert_(getThemeConfig(mockStore).code === 'violet', 'public getThemeConfig.');
+  assert_(buildThemeCss('teal').indexOf('--primary:#0d9488') !== -1, 'public buildThemeCss.');
+  assert_(getThemeCss(mockStore).indexOf(':root') === 0, 'public getThemeCss.');
+}
+
+// C6: periodeBulan_(), dalamPeriode_(), hitungHariKerja_()
+function testPeriodeHariKerjaV240(ctx) {
+  // 1. periodeBulan dari berbagai format
+  assert_(periodeBulan_('2026-09-19') === '2026-09', 'periodeBulan yyyy-MM-dd.');
+  assert_(periodeBulan_('19/09/2026') === '2026-09', 'periodeBulan dd/MM/yyyy.');
+  assert_(periodeBulan_(new Date(2026, 8, 19)) === '2026-09', 'periodeBulan Date.');
+  assert_(periodeBulan_('') === '', 'periodeBulan empty → empty.');
+  assert_(periodeBulan_(null) === '', 'periodeBulan null → empty.');
+  assert_(periodeBulan('2026-09-19') === '2026-09', 'public periodeBulan.');
+
+  // 2. dalamPeriode dengan 'yyyy-MM'
+  assert_(dalamPeriode_('2026-09-15', '2026-09') === true, 'dalamPeriode same month.');
+  assert_(dalamPeriode_('2026-10-01', '2026-09') === false, 'dalamPeriode beda bulan.');
+  assert_(dalamPeriode_('2026-09-19 14:30', '2026-09') === true, 'dalamPeriode dengan waktu.');
+  assert_(dalamPeriode_('19/09/2026', '2026-09') === true, 'dalamPeriode dd/MM vs yyyy-MM.');
+
+  // 3. dalamPeriode dengan exact date 'yyyy-MM-dd'
+  assert_(dalamPeriode_('2026-09-19', '2026-09-19') === true, 'dalamPeriode exact date true.');
+  assert_(dalamPeriode_('2026-09-20', '2026-09-19') === false, 'dalamPeriode exact date false.');
+
+  // 4. dalamPeriode dengan {start,end}
+  assert_(dalamPeriode_('2026-09-15', {start:'2026-09-10', end:'2026-09-20'}) === true, 'dalamPeriode range true.');
+  assert_(dalamPeriode_('2026-09-25', {start:'2026-09-10', end:'2026-09-20'}) === false, 'dalamPeriode range false.');
+  assert_(dalamPeriode_('19/09/2026', {start:'2026-09-10', end:'2026-09-20'}) === true, 'dalamPeriode range dd/MM.');
+
+  // 5. hitungHariKerja — Senin-Jumat, tanpa libur
+  // 2026-09-14 = Senin, 2026-09-18 = Jumat → 5 hari kerja
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-18', []) === 5, 'hitungHariKerja Mon-Fri =5.');
+  // 2026-09-14 Senin s.d. 2026-09-20 Minggu → 5 (Sab-Min libur)
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-20', []) === 5, 'hitungHariKerja Mon-Sun =5.');
+  // 2026-09-19 Sab, 2026-09-20 Min → 0
+  assert_(hitungHariKerja_('2026-09-19', '2026-09-20', []) === 0, 'hitungHariKerja weekend =0.');
+  // Dengan libur nasional
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-18', ['2026-09-16']) === 4, 'hitungHariKerja -1 libur =4.');
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-18', ['2026-09-19','2026-09-20']) === 5, 'hitungHariKerja libur weekend tidak ngaruh =5.');
+
+  // 6. Edge: start > end → 0
+  assert_(hitungHariKerja_('2026-09-20', '2026-09-10', []) === 0, 'hitungHariKerja start>end =0.');
+  assert_(hitungHariKerja_(null, '2026-09-20', []) === 0, 'hitungHariKerja null =0.');
+
+  // 7. Wrapper publik
+  assert_(periodeBulan('2026-09-19') === '2026-09', 'public periodeBulan.');
+  assert_(dalamPeriode('2026-09-15', '2026-09') === true, 'public dalamPeriode.');
+  assert_(hitungHariKerja('2026-09-14', '2026-09-18', []) === 5, 'public hitungHariKerja.');
+}
+
+// C7: findUnique_() & upsertUnique_() — butuh SS
+function testFindUpsertUniqueV240(ctx) {
+  need_(ctx.ssId && ctx.headersMap && ctx.headersMap.ZZ_TEST_CRUD, 'Butuh ssId + ZZ_TEST_CRUD.');
+  var sh = ensureSheet(ctx.ssId, 'ZZ_TEST_CRUD', ctx.headersMap, {});
+  wipeSheet_(sh);
+  invalidateSheetCache('ZZ_TEST_CRUD', ctx.ssId);
+
+  var actor = systemActor();
+  var uniqField = 'nama';
+  var val1 = 'UNIQ-' + Date.now() + '-A';
+  var val2 = 'UNIQ-' + Date.now() + '-B';
+
+  // 1. findUnique kosong → null
+  assert_(findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap) === null, 'findUnique kosong null.');
+
+  // 2. Insert pertama via upsertUnique
+  var r1 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-1', nama: val1, no_hp: '0811' }, actor, ctx.headersMap);
+  assert_(r1.success && r1.data && r1.data.nama === val1, 'upsertUnique insert pertama.');
+  assert_(r1.isUpdate === false, 'upsertUnique isUpdate false.');
+
+  // 3. findUnique ketemu
+  var found = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap);
+  assert_(found && found.id === 'UQ-1', 'findUnique ketemu.');
+
+  // 4. findUnique case-insensitive
+  var foundCI = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1.toLowerCase(), ctx.headersMap);
+  assert_(foundCI && foundCI.id === 'UQ-1', 'findUnique case-insensitive.');
+
+  // 5. upsertUnique update same PK → lolos
+  var r2 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-1', nama: val1, no_hp: '0822' }, actor, ctx.headersMap);
+  assert_(r2.success && r2.isUpdate === true, 'upsertUnique update same PK.');
+  var after = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap);
+  assert_(String(after.no_hp) === '0822' || Number(after.no_hp) === 822, 'upsertUnique update reflected: got=' + after.no_hp + ' (' + typeof after.no_hp + ')');
+
+  // 6. upsertUnique duplikat PK berbeda → throw
+  var threw = false;
+  try { upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-2', nama: val1, no_hp: '0833' }, actor, ctx.headersMap); } catch (e) { threw = e.message.indexOf('Duplikat') !== -1; }
+  assert_(threw, 'upsertUnique duplikat PK berbeda ditolak.');
+
+  // 7. upsertUnique tanpa PK tapi unique sudah ada → inject PK existing (update)
+  var r3 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { nama: val1, no_hp: '0844' }, actor, ctx.headersMap);
+  assert_(r3.success && r3.isUpdate === true, 'upsertUnique tanpa PK inject.');
+
+  // 8. findUnique value kosong → null (tidak throw)
+  assert_(findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, '', ctx.headersMap) === null, 'findUnique empty null.');
+
+  // 9. Wrapper publik
+  assert_(findUnique(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap) !== null, 'public findUnique.');
+  var val3 = 'UNIQ-' + Date.now() + '-C';
+  var r4 = upsertUnique(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-4', nama: val3 }, actor, ctx.headersMap);
+  assert_(r4.success, 'public upsertUnique.');
+
+  // Cleanup
+  wipeSheet_(sh);
+  invalidateSheetCache('ZZ_TEST_CRUD', ctx.ssId);
 }
 
 // ==================== RUNNER & HELPERS ====================
