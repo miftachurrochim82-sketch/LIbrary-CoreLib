@@ -14,10 +14,12 @@ Library GAS backend global ekosistem aplikasi Pemkab Trenggalek. Satu library un
 | Script ID | `1GmeYflfMpRa1iTVgFHRD6K1DMoxc9OoKqpuucPJXgNZ9XBK06O7wgDkO` |
 | Identifier di app | `CoreLib` |
 | Runtime | Apps Script V8, timezone `Asia/Jakarta` |
-| Versi kode saat ini | **v2.4.0 DRAFT** (2026-09-22) |
-| Versi library tersimpan | **pin 15 = v2.3.0** (next: **pin 16 = v2.4.0**) |
+| Versi kode saat ini | **v2.4.0 LIVE** (2026-09-23) |
+| Versi library tersimpan | **pin 17 = v2.4.0** (PASS 47) |
 
-Dokumen lengkap (changelog v2.0→v2.3.0, kontrak keamanan, publik API, prosedur rilis): **[`src/00_MIGRATION_v2.md`](src/00_MIGRATION_v2.md)** — itu master referensi; README ini hanya ringkasan.
+Dokumen lengkap:
+- **Panduan library:** [`ECOSYSTEM_GUIDE.md`](ECOSYSTEM_GUIDE.md) (fokus backend)
+- **Changelog master:** [`src/00_MIGRATION_v2.md`](src/00_MIGRATION_v2.md) (v2.0→v2.4.0) — itu master referensi; README ini hanya ringkasan.
 
 ---
 
