@@ -359,10 +359,16 @@ function parseTanggalBackend(val) {
     if (!val) return null;
     if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
     var str = String(val).trim();
+    if (!str) return null;
+    // ISO datetime dengan T atau Z → coba Date parse dulu (paling akurat)
     if (str.indexOf('T') !== -1) { var d = new Date(str); if (!isNaN(d.getTime())) return d; }
+    // Format 'yyyy-MM-dd' atau 'yyyy-MM-dd HH:mm[:ss]' (spasi) → ambil bagian tanggal saja
     if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-      var p = str.split('T')[0].split('-');
-      return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+      var datePart = str.split(' ')[0].split('T')[0]; // '2026-09-19' dari '2026-09-19 14:30' atau '2026-09-19T...'
+      var p = datePart.split('-');
+      var y = Number(p[0]), m = Number(p[1]), dd = Number(p[2]);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(dd)) return new Date(y, m - 1, dd);
+      return null;
     }
     var ps = str.split(' ')[0].split('/');
     if (ps.length === 3) return new Date(Number(ps[2]), Number(ps[1]) - 1, Number(ps[0]));
@@ -1088,7 +1094,8 @@ function findUnique_(ssId, sheetName, field, value, headersMap, opts) {
   if (!ssId || !sheetName || !field) throw new Error('findUnique_ butuh ssId, sheetName, field.');
   if (value === undefined || value === null || String(value).trim() === '') return null;
   opts = opts || {};
-  var rows = getSheetDataCached(ssId, sheetName, headersMap, 180, opts).filter(function(r){ return !r.deleted_at; });
+  // Selalu baca fresh (bypass cache) untuk cek unik — hindari false-negative akibat cache basi setelah upsert.
+  var rows = readRecordsNoLock(ssId, sheetName, headersMap, opts).filter(function(r){ return !r.deleted_at; });
   var target = String(value).trim().toLowerCase();
   for (var i = 0; i < rows.length; i++) {
     var v = String(rows[i][field] || '').trim().toLowerCase();
