@@ -1191,7 +1191,7 @@ function testFindUpsertUniqueV240(ctx) {
   var r2 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-1', nama: val1, no_hp: '0822' }, actor, ctx.headersMap);
   assert_(r2.success && r2.isUpdate === true, 'upsertUnique update same PK.');
   var after = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap);
-  assert_(after.no_hp === '0822', 'upsertUnique update reflected.');
+  assert_(String(after.no_hp) === '0822', 'upsertUnique update reflected: got=' + after.no_hp);
 
   // 6. upsertUnique duplikat PK berbeda → throw
   var threw = false;
