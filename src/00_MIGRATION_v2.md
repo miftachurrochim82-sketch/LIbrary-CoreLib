@@ -5,8 +5,8 @@
 > adalah **salinan sumber resmi** dari library GAS `CoreLib` — setiap perubahan pada
 > library harus dicerminkan di sini, dan sebaliknya.
 >
-> **Status terakhir**: **v2.4.0 DRAFT** (2026-09-22) — belum save versi — target `testAll()` → PASS 45 / FAIL 0 / SKIP 1.
-> **Live terakhir**: v2.3.0 (2026-09-19, pin 15).
+> **Status terakhir**: **v2.4.0 DRAFT A+B** (2026-09-22) — belum save versi — target `testAll()` → PASS 47 / FAIL 0 / SKIP 1.
+> **Live terakhir**: v2.3.0 (2026-09-19, pin 15) → next 16 = v2.4.0.
 
 ---
 
@@ -39,7 +39,7 @@
 | File | Isi |
 |---|---|
 | `appsscript.json` | Manifest: runtime V8, timezone, oauth scopes |
-| `01_CoreFoundation.gs` | Engine database Google Sheets (physical row index, `toAlignedRow_`), caching ber-namespace + TTL, parser tanggal ISO-8601, **§7b util tanggal sadar-WIB (`todayIsoLocal_`, `dateKey10_`)**, **§11b util publik v2.3.0 (`paginate_`, `matchSearch_`)**, helper SIMPEG (level jabatan, unit bawahan), logger |
+| `01_CoreFoundation.gs` | Engine database Google Sheets (physical row index, `toAlignedRow_`), caching ber-namespace + TTL, parser tanggal ISO-8601, **§7b WIB (`todayIsoLocal_`, `dateKey10_`)**, **§11b v2.3.0 (`paginate_`, `matchSearch_`)**, **§11d v2.4.0 C6 (`periodeBulan_`, `dalamPeriode_`, `hitungHariKerja_`)** + **§11e C7 (`findUnique_`, `upsertUnique_`)**, helper SIMPEG, logger |
 | `02_CoreGateway.gs` | Auth bridge SSO (tiket → token sesi HMAC), `checkAuth`, role guard (`requireRole_`, `getRoleForEmail_`, `levelOf_`), `dispatchAction` + declarative resource router, whitelist config, **§5b v2.4.0 `validateTransition_` + `assertOwnership_`** |
 | `03_CoreServices.gs` | Layanan siap pakai: CRUD generik (`apiSave`/`apiDelete`), config service, `executeAppSetup` (pembuatan sheet + folder Drive), resolusi pegawai, **§3b v2.4.0 tema dinamis `getThemeConfig_`/`buildThemeCss_`** |
 | `99_CoreTest.gs` | Test suite diagnostik: `testAll()` (**46 test total, PASS 45 + SKIP 1**), `runCoreTests(ctx)`, `cekUpdateCorelib()` |
@@ -185,7 +185,7 @@ Target verifikasi: `testAll()` → **PASS 47 / FAIL 0 / SKIP 1** (tambah 5 test:
 
 | Fungsi | Kegunaan | Hasil yang diharapkan |
 |---|---|---|
-| **`testAll()`** | Test lengkap resmi (**46 test total**, termasuk akses spreadsheet) | **`PASS: 45 / FAIL: 0 / SKIP: 1`** — SKIP = `testCacheIsolation` (butuh `TEST_SPREADSHEET_ID_B`) |
+| **`testAll()`** | Test lengkap resmi (**48 test total**, termasuk akses spreadsheet) | **`PASS: 47 / FAIL: 0 / SKIP: 1`** — SKIP = `testCacheIsolation` (butuh `TEST_SPREADSHEET_ID_B`) |
 | `cekUpdateCorelib()` | Diagnostik cepat: fungsi v2.2/v2.3.0/v2.4.0 tersedia? properti benar? | Semua ✅. Baris `❌ CoreLib is not defined` **normal** bila dijalankan di dalam proyek CoreLib sendiri (library tidak me-reference dirinya sendiri) |
 | `runCoreTests()` langsung | Tanpa `ctx` → `ctx = {}` | `PASS: 21 / FAIL: 0 / SKIP: 25` — test database otomatis SKIP. Bukan pengganti `testAll()` |
 
