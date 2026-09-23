@@ -123,9 +123,9 @@ Aditif murni — util baru, tanpa perubahan perilaku lama.
 
 Verifikasi live 2026-09-19: `testAll()` → **PASS 42 / FAIL 0 / SKIP 1**. Versi library tersimpan = **15**.
 
-### v2.4.0 DRAFT (2026-09-22) — Workflow + Ownership + Tema ⭐ — **BELUM SAVE, REVIEW ONLY**
+### v2.4.0 DRAFT (2026-09-22) — A+B: Workflow + Ownership + Tema + Periode + Unique ⭐ — **BELUM SAVE, REVIEW ONLY**
 
-Aditif murni — 3 util baru untuk 5 app (menu "Saya" + tema dinamis). Tanpa perubahan perilaku lama.
+Aditif murni — 5 util baru untuk 5 app (menu "Saya" + tema dinamis + rekap piramida + anti-duplikat). Tanpa perubahan perilaku lama.
 
 | Kode | Fungsi Publik | Internal | Deskripsi |
 |---|---|---|---|
@@ -133,18 +133,29 @@ Aditif murni — 3 util baru untuk 5 app (menu "Saya" + tema dinamis). Tanpa per
 | **C4** | `validateTransition(cur, tgt, map, isAdmin)` | `validateTransition_()` | Validasi perpindahan status workflow case-insensitive. `isAdmin=true` → bypass. Map mis. `{draft:['baru','batal'], baru:['diproses','batal'], diproses:['selesai','batal']}`. Throw `Transisi "draft → selesai" tidak diizinkan.` |
 | **C8** | `getThemeConfig(store)` | `getThemeConfig_()` | Baca tema dari `ScriptProperties`: `THEME_JSON` (JSON custom atau code) → `THEME_CODE` legacy → `emerald` default. Return objek tema lengkap `{code, primary, primaryDark, ...}` cermin `AppCore.themes` (6 preset). |
 | **C8** | `buildThemeCss(theme)` + `getThemeCss(store)` | `buildThemeCss_()` / `getThemeCss_()` | Bangun CSS `:root{--primary:#...}` untuk inject `<?!= getThemeCss() ?>` di `Index.html` atau via `google.script.run`. |
+| **C6** | `periodeBulan(val)` | `periodeBulan_()` | Kunci periode `'yyyy-MM'` dari tanggal apapun (ISO/legacy/Date). Untuk grouping rekap piramida per bulan. |
+| **C6** | `dalamPeriode(val, periode)` | `dalamPeriode_()` | Cek tanggal `val` dalam periode: `'yyyy-MM'` atau `'yyyy-MM-dd'` atau `{start,end}`. |
+| **C6** | `hitungHariKerja(start, end, holidays)` | `hitungHariKerja_()` | Hitung hari kerja Senin-Jumat inklusif dikurangi `holidays` (`['yyyy-MM-dd']`). Untuk SLA RTL. |
+| **C7** | `findUnique(ssId, sheet, field, val, map, opts)` | `findUnique_()` | Cari 1 record by field unik (case-insensitive), return `null` bila tidak ketemu. |
+| **C7** | `upsertUnique(ssId, sheet, uniqueField, rec, actor, map, opts)` | `upsertUnique_()` | Insert/update by `uniqueField` (cek duplikat PK berbeda → throw). Delegasi `apiSave`. |
 
 **Cara pakai di app:**
 ```js
 // 01_ConfigAndBridge.gs — inject tema Opsi B
 function getThemeCss() { return CoreLib.getThemeCss(PropertiesService.getScriptProperties()); }
-
 // 02_AppLogic.gs — guard manual
 CoreLib.assertOwnership(session.user, row.pegawai_id); // throw bila bukan pemilik
 CoreLib.validateTransition(row.status, 'diproses', STATUS_MAP, session.user.role === 'admin');
+// Rekap piramida
+var periode = CoreLib.periodeBulan(row.tanggal); // '2026-09'
+if (CoreLib.dalamPeriode(row.tanggal, '2026-09')) { /* hitung */ }
+var sla = CoreLib.hitungHariKerja(row.created_at, row.selesai_at, liburNasional);
+// Anti-duplikat
+var existing = CoreLib.findUnique(ssId, 'LAPORAN', 'kode_laporan', kode, headersMap);
+CoreLib.upsertUnique(ssId, 'LAPORAN', 'kode_laporan', record, actor, headersMap);
 ```
 
-Target verifikasi: `testAll()` → **PASS 45 / FAIL 0 / SKIP 1** (tambah 3 test: `testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`). Versi library next = **16**.
+Target verifikasi: `testAll()` → **PASS 47 / FAIL 0 / SKIP 1** (tambah 5 test: `testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`, `testPeriodeHariKerjaV240`, `testFindUpsertUniqueV240`). Versi library next = **16**.
 
 ---
 
@@ -180,7 +191,7 @@ Target verifikasi: `testAll()` → **PASS 45 / FAIL 0 / SKIP 1** (tambah 3 test:
 
 Setiap rilis wajib: `testAll()` → **FAIL: 0** + `[PASS] testRoleGateV222` + `[PASS] testTodayIsoLocalV230` / `[PASS] testDateKey10V230` / `[PASS] testPaginateV230` / `[PASS] testMatchSearchV230` + `[PASS] testAssertOwnershipV240` / `[PASS] testValidateTransitionV240` / `[PASS] testThemeConfigV240`.
 
-### Distribusi 46 test
+### Distribusi 48 test
 
 | Grup | Jumlah | Keterangan |
 |---|---|---|
@@ -190,8 +201,8 @@ Setiap rilis wajib: `testAll()` → **FAIL: 0** + `[PASS] testRoleGateV222` + `[
 | v2.2 | 9 | Util publik baru (norm/parse/whitelist/validate/genUnique/requireRole/checkRole/getRoleForEmail/isAllowedConfigKey) |
 | v2.2.2 | 1 | Regresi fail-closed `levelOf_` (`testRoleGateV222`) |
 | **v2.3.0** | **4** | **`testTodayIsoLocalV230`, `testDateKey10V230`, `testPaginateV230`, `testMatchSearchV230`** |
-| **v2.4.0** | **3** | **`testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`** |
-| **Total** | **46** | PASS 45 + SKIP 1 (cacheIsolation) |
+| **v2.4.0 A+B** | **5** | **`testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`, `testPeriodeHariKerjaV240`, `testFindUpsertUniqueV240`** |
+| **Total** | **48** | PASS 47 + SKIP 1 (cacheIsolation) |
 
 ---
 
@@ -278,9 +289,21 @@ Daftar fungsi yang bisa dipanggil via `CoreLib.xxx` dari aplikasi konsumen.
 | `CoreLib.buildThemeCss(theme)` | Bangun CSS `:root{--primary:...}` dari objek/code. |
 | `CoreLib.getThemeCss(store)` | Baca + bangun CSS sekali panggil (untuk `<?!= getThemeCss() ?>`). |
 
-### Kandidat promosi berikutnya (v2.5.0+)
+### Periode & Hari Kerja (v2.4.0 / C6) ⭐ — SUDAH MASUK DRAFT (A+B)
+| Fungsi | Deskripsi |
+|---|---|
+| `CoreLib.periodeBulan(val)` | Kunci `'yyyy-MM'` dari tanggal apapun. |
+| `CoreLib.dalamPeriode(val, periode)` | Cek tanggal dalam `'yyyy-MM'` / `'yyyy-MM-dd'` / `{start,end}`. |
+| `CoreLib.hitungHariKerja(start, end, holidays)` | Hari kerja Senin-Jumat inklusif dikurangi libur. |
+
+### Unique Lookup (v2.4.0 / C7) ⭐ — SUDAH MASUK DRAFT (A+B)
+| Fungsi | Deskripsi |
+|---|---|
+| `CoreLib.findUnique(ssId, sheet, field, val, map, opts)` | Cari 1 record by field unik (case-insensitive). |
+| `CoreLib.upsertUnique(ssId, sheet, field, rec, actor, map, opts)` | Insert/update by field unik, throw bila duplikat PK berbeda. |
+
+### Kandidat promosi berikutnya (v2.6.0+)
 | Kode | Kandidat | Status |
 |---|---|---|
-| C6 | `periodeBulan` / `dalamPeriode` / `hitungHariKerja` | Antre |
-| C7 | `findUnique` / `upsertUnique` by unique-key | Antre |
-| C9 | `auditLog` helper terpusat? | Diskusi |
+| C9 | `auditLog` helper terpusat + `getHistory`? | Diskusi |
+| C10 | `export` helper server-side? | Diskusi |
