@@ -5,8 +5,8 @@
 > adalah **salinan sumber resmi** dari library GAS `CoreLib` — setiap perubahan pada
 > library harus dicerminkan di sini, dan sebaliknya.
 >
-> **Status terakhir**: **v2.4.0 DRAFT A+B** (2026-09-22) — belum save versi — target `testAll()` → PASS 47 / FAIL 0 / SKIP 1.
-> **Live terakhir**: v2.3.0 (2026-09-19, pin 15) → next 16 = v2.4.0.
+> **Status terakhir**: **v2.4.0 LIVE v17** (2026-09-23) — PASS 47 / FAIL 0 / SKIP 1 — https://script.google.com/macros/library/d/1GmeYflfMpRa1iTVgFHRD6K1DMoxc9OoKqpuucPJXgNZ9XBK06O7wgDkO/17 / FAIL 0 / SKIP 1.
+> **Live terakhir**: v2.4.0 (2026-09-23, pin 17) ← https://script.google.com/macros/library/d/1GmeYflfMpRa1iTVgFHRD6K1DMoxc9OoKqpuucPJXgNZ9XBK06O7wgDkO/17
 
 ---
 
@@ -19,7 +19,7 @@
 | Identifier di app | `CoreLib` |
 | Runtime | Apps Script V8, timezone `Asia/Jakarta` |
 | Versi kode saat ini | **v2.4.0 DRAFT** (2026-09-22) |
-| Versi library tersimpan | **15 = v2.3.0** (live) → next **16 = v2.4.0** (draft, belum save) |
+| Versi library tersimpan | **17 = v2.4.0** (live 2026-09-23) |
 
 ### Aplikasi konsumen
 
@@ -155,7 +155,8 @@ var existing = CoreLib.findUnique(ssId, 'LAPORAN', 'kode_laporan', kode, headers
 CoreLib.upsertUnique(ssId, 'LAPORAN', 'kode_laporan', record, actor, headersMap);
 ```
 
-Target verifikasi: `testAll()` → **PASS 47 / FAIL 0 / SKIP 1** (tambah 5 test: `testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`, `testPeriodeHariKerjaV240`, `testFindUpsertUniqueV240`). Versi library next = **16**.
+Verifikasi live 2026-09-23: `testAll()` → **PASS 47 / FAIL 0 / SKIP 1**. Versi library tersimpan = **17** (v2.4.0 A+B).
+Target verifikasi: `testAll()` → **PASS 47 / FAIL 0 / SKIP 1** (tambah 5 test: `testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`, `testPeriodeHariKerjaV240`, `testFindUpsertUniqueV240`). Versi library next = **17** (sudah live).
 
 ---
 
