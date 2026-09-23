@@ -26,10 +26,10 @@ Dokumen lengkap (changelog v2.0→v2.3.0, kontrak keamanan, publik API, prosedur
 | File | Isi |
 |---|---|
 | `src/appsscript.json` | Manifest: runtime V8, timezone, oauth scopes |
-| `src/01_CoreFoundation.gs` | Engine DB Sheets (physical row index, `toAlignedRow_`), cache ber-namespace + TTL, parser tanggal ISO-8601, util sadar-WIB (`todayIsoLocal_`, `dateKey10_`), util publik (`paginate_`, `matchSearch_`), helper SIMPEG, logger |
-| `src/02_CoreGateway.gs` | Auth bridge SSO (tiket → token sesi HMAC), `checkAuth`, role guard (`requireRole_`, `levelOf_` fail-closed), `dispatchAction` + declarative resource router (RLS `ownerField`), whitelist config, **C4 `validateTransition_` + C5 `assertOwnership_` (v2.4.0)** |
-| `src/03_CoreServices.gs` | CRUD generik (`apiSave`/`apiDelete`), config service, `executeAppSetup`, resolusi pegawai, **C8 tema dinamis `getThemeConfig_`/`buildThemeCss_` (v2.4.0)** |
-| `src/99_CoreTest.gs` | Test suite diagnostik: `testAll()` (**46 test, PASS 45 + SKIP 1**), `runCoreTests(ctx)`, `cekUpdateCorelib()` |
+| `src/01_CoreFoundation.gs` | Engine DB Sheets + **C6** `periodeBulan`/`dalamPeriode`/`hitungHariKerja` + **C7** `findUnique`/`upsertUnique` (v2.4.0 A+B), util WIB, SIMPEG, logger |
+| `src/02_CoreGateway.gs` | Auth bridge SSO + **C4** `validateTransition_` + **C5** `assertOwnership_` (v2.4.0), declarative router RLS `ownerField` |
+| `src/03_CoreServices.gs` | CRUD generik + **C8** tema dinamis `getThemeConfig_`/`buildThemeCss_` (v2.4.0) |
+| `src/99_CoreTest.gs` | Test suite: `testAll()` (**48 test, PASS 47 + SKIP 1**), `runCoreTests(ctx)` |
 | `src/00_MIGRATION_v2.md` | ★ Dokumen master (hanya di GitHub — GAS tidak bisa menyimpan `.md`) |
 | `clasp.json` / `claspignore` | Tooling clasp; whitelist 5 file library yang boleh ter-push |
 
@@ -60,10 +60,10 @@ Template aplikasi baru: **[`starter-kit`](https://github.com/miftachurrochim82-s
 
 | Fungsi | Hasil yang diharapkan |
 |---|---|
-| `testAll()` (di editor CoreLib) | `PASS: 45 / FAIL: 0 / SKIP: 1` |
+| `testAll()` (di editor CoreLib) | `PASS: 47 / FAIL: 0 / SKIP: 1` |
 | `runCoreTests(ctx)` dari app | Semua grup database PASS (butuh `ctx` lengkap) |
 
-Setiap rilis wajib `FAIL: 0` + test regresi fail-closed (`testRoleGateV222`) + test v2.3.0 (`testTodayIsoLocalV230`, `testDateKey10V230`, `testPaginateV230`, `testMatchSearchV230`) + test v2.4.0 (`testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`).
+Setiap rilis wajib `FAIL: 0` + regresi `testRoleGateV222` + v2.3.0 (4 test) + v2.4.0 A+B (5 test: `testAssertOwnershipV240`, `testValidateTransitionV240`, `testThemeConfigV240`, `testPeriodeHariKerjaV240`, `testFindUpsertUniqueV240`).
 
 ---
 
