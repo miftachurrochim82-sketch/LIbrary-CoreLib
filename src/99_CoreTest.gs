@@ -1,8 +1,9 @@
 // ============================================================
 // CORE LIBRARY GLOBAL v2.4.0 - 99_CoreTest.gs
-// Changelog v2.4.0 (2026-09-22) — C4/C5/C8 DRAFT:
-// - TEST BARU (3): testAssertOwnershipV240, testValidateTransitionV240,
-//   testThemeConfigV240 — regresi C4/C5/C8. Target testAll: PASS 45 / FAIL 0 / SKIP 1.
+// Changelog v2.4.0 (2026-09-22) — A+B DRAFT (C4/C5/C6/C7/C8):
+// - TEST BARU (5): testAssertOwnershipV240, testValidateTransitionV240,
+//   testThemeConfigV240, testPeriodeHariKerjaV240, testFindUpsertUniqueV240
+//   — regresi C4/C5/C6/C7/C8. Target testAll: PASS 47 / FAIL 0 / SKIP 1.
 // Changelog v2.3.0 (2026-09-19):
 // - TEST BARU (4): testTodayIsoLocalV230, testDateKey10V230,
 //   testPaginateV230, testMatchSearchV230 — regresi util publik
@@ -78,8 +79,9 @@ function runCoreTests(ctx) {
     // v2.3.0 baru (C1/C2/C3)
     testTodayIsoLocalV230, testDateKey10V230,
     testPaginateV230, testMatchSearchV230,
-    // v2.4.0 baru (C4/C5/C8)
-    testAssertOwnershipV240, testValidateTransitionV240, testThemeConfigV240
+    // v2.4.0 baru (C4/C5/C6/C7/C8) — A+B
+    testAssertOwnershipV240, testValidateTransitionV240, testThemeConfigV240,
+    testPeriodeHariKerjaV240, testFindUpsertUniqueV240
   ];
   var passed = 0, failed = 0, skipped = 0, details = [];
   tests.forEach(function(fn) {
@@ -1109,6 +1111,109 @@ function testThemeConfigV240(ctx) {
   assert_(getThemeConfig(mockStore).code === 'violet', 'public getThemeConfig.');
   assert_(buildThemeCss('teal').indexOf('--primary:#0d9488') !== -1, 'public buildThemeCss.');
   assert_(getThemeCss(mockStore).indexOf(':root') === 0, 'public getThemeCss.');
+}
+
+// C6: periodeBulan_(), dalamPeriode_(), hitungHariKerja_()
+function testPeriodeHariKerjaV240(ctx) {
+  // 1. periodeBulan dari berbagai format
+  assert_(periodeBulan_('2026-09-19') === '2026-09', 'periodeBulan yyyy-MM-dd.');
+  assert_(periodeBulan_('19/09/2026') === '2026-09', 'periodeBulan dd/MM/yyyy.');
+  assert_(periodeBulan_(new Date(2026, 8, 19)) === '2026-09', 'periodeBulan Date.');
+  assert_(periodeBulan_('') === '', 'periodeBulan empty → empty.');
+  assert_(periodeBulan_(null) === '', 'periodeBulan null → empty.');
+  assert_(periodeBulan('2026-09-19') === '2026-09', 'public periodeBulan.');
+
+  // 2. dalamPeriode dengan 'yyyy-MM'
+  assert_(dalamPeriode_('2026-09-15', '2026-09') === true, 'dalamPeriode same month.');
+  assert_(dalamPeriode_('2026-10-01', '2026-09') === false, 'dalamPeriode beda bulan.');
+  assert_(dalamPeriode_('2026-09-19 14:30', '2026-09') === true, 'dalamPeriode dengan waktu.');
+  assert_(dalamPeriode_('19/09/2026', '2026-09') === true, 'dalamPeriode dd/MM vs yyyy-MM.');
+
+  // 3. dalamPeriode dengan exact date 'yyyy-MM-dd'
+  assert_(dalamPeriode_('2026-09-19', '2026-09-19') === true, 'dalamPeriode exact date true.');
+  assert_(dalamPeriode_('2026-09-20', '2026-09-19') === false, 'dalamPeriode exact date false.');
+
+  // 4. dalamPeriode dengan {start,end}
+  assert_(dalamPeriode_('2026-09-15', {start:'2026-09-10', end:'2026-09-20'}) === true, 'dalamPeriode range true.');
+  assert_(dalamPeriode_('2026-09-25', {start:'2026-09-10', end:'2026-09-20'}) === false, 'dalamPeriode range false.');
+  assert_(dalamPeriode_('19/09/2026', {start:'2026-09-10', end:'2026-09-20'}) === true, 'dalamPeriode range dd/MM.');
+
+  // 5. hitungHariKerja — Senin-Jumat, tanpa libur
+  // 2026-09-14 = Senin, 2026-09-18 = Jumat → 5 hari kerja
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-18', []) === 5, 'hitungHariKerja Mon-Fri =5.');
+  // 2026-09-14 Senin s.d. 2026-09-20 Minggu → 5 (Sab-Min libur)
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-20', []) === 5, 'hitungHariKerja Mon-Sun =5.');
+  // 2026-09-19 Sab, 2026-09-20 Min → 0
+  assert_(hitungHariKerja_('2026-09-19', '2026-09-20', []) === 0, 'hitungHariKerja weekend =0.');
+  // Dengan libur nasional
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-18', ['2026-09-16']) === 4, 'hitungHariKerja -1 libur =4.');
+  assert_(hitungHariKerja_('2026-09-14', '2026-09-18', ['2026-09-19','2026-09-20']) === 5, 'hitungHariKerja libur weekend tidak ngaruh =5.');
+
+  // 6. Edge: start > end → 0
+  assert_(hitungHariKerja_('2026-09-20', '2026-09-10', []) === 0, 'hitungHariKerja start>end =0.');
+  assert_(hitungHariKerja_(null, '2026-09-20', []) === 0, 'hitungHariKerja null =0.');
+
+  // 7. Wrapper publik
+  assert_(periodeBulan('2026-09-19') === '2026-09', 'public periodeBulan.');
+  assert_(dalamPeriode('2026-09-15', '2026-09') === true, 'public dalamPeriode.');
+  assert_(hitungHariKerja('2026-09-14', '2026-09-18', []) === 5, 'public hitungHariKerja.');
+}
+
+// C7: findUnique_() & upsertUnique_() — butuh SS
+function testFindUpsertUniqueV240(ctx) {
+  need_(ctx.ssId && ctx.headersMap && ctx.headersMap.ZZ_TEST_CRUD, 'Butuh ssId + ZZ_TEST_CRUD.');
+  var sh = ensureSheet(ctx.ssId, 'ZZ_TEST_CRUD', ctx.headersMap, {});
+  wipeSheet_(sh);
+  invalidateSheetCache('ZZ_TEST_CRUD', ctx.ssId);
+
+  var actor = systemActor();
+  var uniqField = 'nama';
+  var val1 = 'UNIQ-' + Date.now() + '-A';
+  var val2 = 'UNIQ-' + Date.now() + '-B';
+
+  // 1. findUnique kosong → null
+  assert_(findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap) === null, 'findUnique kosong null.');
+
+  // 2. Insert pertama via upsertUnique
+  var r1 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-1', nama: val1, no_hp: '0811' }, actor, ctx.headersMap);
+  assert_(r1.success && r1.data && r1.data.nama === val1, 'upsertUnique insert pertama.');
+  assert_(r1.isUpdate === false, 'upsertUnique isUpdate false.');
+
+  // 3. findUnique ketemu
+  var found = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap);
+  assert_(found && found.id === 'UQ-1', 'findUnique ketemu.');
+
+  // 4. findUnique case-insensitive
+  var foundCI = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1.toLowerCase(), ctx.headersMap);
+  assert_(foundCI && foundCI.id === 'UQ-1', 'findUnique case-insensitive.');
+
+  // 5. upsertUnique update same PK → lolos
+  var r2 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-1', nama: val1, no_hp: '0822' }, actor, ctx.headersMap);
+  assert_(r2.success && r2.isUpdate === true, 'upsertUnique update same PK.');
+  var after = findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap);
+  assert_(after.no_hp === '0822', 'upsertUnique update reflected.');
+
+  // 6. upsertUnique duplikat PK berbeda → throw
+  var threw = false;
+  try { upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-2', nama: val1, no_hp: '0833' }, actor, ctx.headersMap); } catch (e) { threw = e.message.indexOf('Duplikat') !== -1; }
+  assert_(threw, 'upsertUnique duplikat PK berbeda ditolak.');
+
+  // 7. upsertUnique tanpa PK tapi unique sudah ada → inject PK existing (update)
+  var r3 = upsertUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { nama: val1, no_hp: '0844' }, actor, ctx.headersMap);
+  assert_(r3.success && r3.isUpdate === true, 'upsertUnique tanpa PK inject.');
+
+  // 8. findUnique value kosong → null (tidak throw)
+  assert_(findUnique_(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, '', ctx.headersMap) === null, 'findUnique empty null.');
+
+  // 9. Wrapper publik
+  assert_(findUnique(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, val1, ctx.headersMap) !== null, 'public findUnique.');
+  var val3 = 'UNIQ-' + Date.now() + '-C';
+  var r4 = upsertUnique(ctx.ssId, 'ZZ_TEST_CRUD', uniqField, { id: 'UQ-4', nama: val3 }, actor, ctx.headersMap);
+  assert_(r4.success, 'public upsertUnique.');
+
+  // Cleanup
+  wipeSheet_(sh);
+  invalidateSheetCache('ZZ_TEST_CRUD', ctx.ssId);
 }
 
 // ==================== RUNNER & HELPERS ====================
